@@ -1,1 +1,480 @@
-1234
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local root = character:WaitForChild("HumanoidRootPart")
+
+local waypoints = {}
+local farming = false
+local currentIndex = 1
+
+-- Создаём GUI
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "WaypointFarmGui"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = player:WaitForChild("PlayerGui")
+
+-- Главный фрейм
+local Frame = Instance.new("Frame")
+Frame.Size = UDim2.new(0, 340, 0, 480)
+Frame.Position = UDim2.new(0.5, -170, 0.5, -240)
+Frame.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+Frame.BorderSizePixel = 0
+Frame.Active = true
+Frame.Draggable = true
+Frame.Parent = ScreenGui
+
+-- Скруглённые углы
+local Corner = Instance.new("UICorner")
+Corner.CornerRadius = UDim.new(0, 10)
+Corner.Parent = Frame
+
+-- Тень
+local Shadow = Instance.new("ImageLabel")
+Shadow.Size = UDim2.new(1, 30, 1, 30)
+Shadow.Position = UDim2.new(0, -15, 0, -15)
+Shadow.BackgroundTransparency = 1
+Shadow.Image = "rbxassetid://5554236805"
+Shadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
+Shadow.ImageTransparency = 0.5
+Shadow.ZIndex = -1
+Shadow.Parent = Frame
+
+-- Заголовок
+local TitleBar = Instance.new("Frame")
+TitleBar.Size = UDim2.new(1, 0, 0, 44)
+TitleBar.BackgroundColor3 = Color3.fromRGB(30, 100, 255)
+TitleBar.BorderSizePixel = 0
+TitleBar.Parent = Frame
+
+local TitleCorner = Instance.new("UICorner")
+TitleCorner.CornerRadius = UDim.new(0, 10)
+TitleCorner.Parent = TitleBar
+
+-- Исправляем нижние углы заголовка
+local TitleFix = Instance.new("Frame")
+TitleFix.Size = UDim2.new(1, 0, 0.5, 0)
+TitleFix.Position = UDim2.new(0, 0, 0.5, 0)
+TitleFix.BackgroundColor3 = Color3.fromRGB(30, 100, 255)
+TitleFix.BorderSizePixel = 0
+TitleFix.Parent = TitleBar
+
+local Title = Instance.new("TextLabel")
+Title.Text = "⚡ Waypoint Farm"
+Title.Size = UDim2.new(1, -90, 1, 0)
+Title.Position = UDim2.new(0, 14, 0, 0)
+Title.BackgroundTransparency = 1
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 16
+Title.Font = Enum.Font.GothamBold
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = TitleBar
+
+-- Кнопка закрыть
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Text = "✕"
+CloseBtn.Size = UDim2.new(0, 30, 0, 30)
+CloseBtn.Position = UDim2.new(1, -38, 0.5, -15)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.TextSize = 14
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.BorderSizePixel = 0
+CloseBtn.Parent = TitleBar
+local CloseCorner = Instance.new("UICorner")
+CloseCorner.CornerRadius = UDim.new(0, 6)
+CloseCorner.Parent = CloseBtn
+
+-- Кнопка свернуть
+local MinBtn = Instance.new("TextButton")
+MinBtn.Text = "–"
+MinBtn.Size = UDim2.new(0, 30, 0, 30)
+MinBtn.Position = UDim2.new(1, -74, 0.5, -15)
+MinBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+MinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+MinBtn.TextSize = 16
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.BorderSizePixel = 0
+MinBtn.Parent = TitleBar
+local MinCorner = Instance.new("UICorner")
+MinCorner.CornerRadius = UDim.new(0, 6)
+MinCorner.Parent = MinBtn
+
+-- Контент
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1, 0, 1, -44)
+Content.Position = UDim2.new(0, 0, 0, 44)
+Content.BackgroundTransparency = 1
+Content.Parent = Frame
+
+local Padding = Instance.new("UIPadding")
+Padding.PaddingLeft = UDim.new(0, 14)
+Padding.PaddingRight = UDim.new(0, 14)
+Padding.PaddingTop = UDim.new(0, 10)
+Padding.Parent = Content
+
+-- Хелпер для кнопок
+local function makeButton(text, yPos, color)
+    local btn = Instance.new("TextButton")
+    btn.Text = text
+    btn.Size = UDim2.new(1, 0, 0, 36)
+    btn.Position = UDim2.new(0, 0, 0, yPos)
+    btn.BackgroundColor3 = color or Color3.fromRGB(50, 50, 68)
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.TextSize = 13
+    btn.Font = Enum.Font.GothamSemibold
+    btn.BorderSizePixel = 0
+    btn.Parent = Content
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 7)
+    c.Parent = btn
+    return btn
+end
+
+local SaveButton = makeButton("＋  Сохранить текущую позицию", 0, Color3.fromRGB(40, 130, 255))
+
+-- Список точек
+local ListContainer = Instance.new("Frame")
+ListContainer.Size = UDim2.new(1, 0, 0, 178)
+ListContainer.Position = UDim2.new(0, 0, 0, 46)
+ListContainer.BackgroundColor3 = Color3.fromRGB(14, 14, 20)
+ListContainer.BorderSizePixel = 0
+ListContainer.ClipsDescendants = true
+ListContainer.Parent = Content
+local LC = Instance.new("UICorner")
+LC.CornerRadius = UDim.new(0, 7)
+LC.Parent = ListContainer
+
+local List = Instance.new("ScrollingFrame")
+List.Size = UDim2.new(1, 0, 1, 0)
+List.BackgroundTransparency = 1
+List.BorderSizePixel = 0
+List.ScrollBarThickness = 3
+List.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 120)
+List.Parent = ListContainer
+
+local ListLayout = Instance.new("UIListLayout")
+ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+ListLayout.Padding = UDim.new(0, 4)
+ListLayout.Parent = List
+
+local ListPad = Instance.new("UIPadding")
+ListPad.PaddingLeft = UDim.new(0, 6)
+ListPad.PaddingRight = UDim.new(0, 6)
+ListPad.PaddingTop = UDim.new(0, 6)
+ListPad.Parent = List
+
+-- Кнопки экспорт / импорт
+local ExportBtn = makeButton("📋  Копировать точки", 234, Color3.fromRGB(60, 60, 80))
+ExportBtn.Size = UDim2.new(0.48, 0, 0, 32)
+
+local ImportBtn = makeButton("📥  Вставить точки", 234, Color3.fromRGB(60, 60, 80))
+ImportBtn.Size = UDim2.new(0.48, 0, 0, 32)
+ImportBtn.Position = UDim2.new(0.52, 0, 0, 234)
+
+-- Поле для буфера обмена
+local ClipLabel = Instance.new("TextLabel")
+ClipLabel.Text = "Нет данных"
+ClipLabel.Size = UDim2.new(1, 0, 0, 18)
+ClipLabel.Position = UDim2.new(0, 0, 0, 272)
+ClipLabel.BackgroundTransparency = 1
+ClipLabel.TextColor3 = Color3.fromRGB(120, 120, 160)
+ClipLabel.TextSize = 11
+ClipLabel.Font = Enum.Font.Gotham
+ClipLabel.TextXAlignment = Enum.TextXAlignment.Left
+ClipLabel.TextTruncate = Enum.TextTruncate.AtEnd
+ClipLabel.Parent = Content
+
+local ImportBox = Instance.new("TextBox")
+ImportBox.PlaceholderText = "Вставь сюда данные точек и нажми 📥"
+ImportBox.Text = ""
+ImportBox.Size = UDim2.new(1, 0, 0, 32)
+ImportBox.Position = UDim2.new(0, 0, 0, 296)
+ImportBox.BackgroundColor3 = Color3.fromRGB(30, 30, 44)
+ImportBox.TextColor3 = Color3.fromRGB(200, 200, 255)
+ImportBox.PlaceholderColor3 = Color3.fromRGB(80, 80, 110)
+ImportBox.TextSize = 11
+ImportBox.Font = Enum.Font.Gotham
+ImportBox.BorderSizePixel = 0
+ImportBox.ClearTextOnFocus = false
+ImportBox.Parent = Content
+local IBC = Instance.new("UICorner")
+IBC.CornerRadius = UDim.new(0, 7)
+IBC.Parent = ImportBox
+local IBP = Instance.new("UIPadding")
+IBP.PaddingLeft = UDim.new(0, 8)
+IBP.Parent = ImportBox
+
+local StartButton = makeButton("▶  Запустить фарм", 338, Color3.fromRGB(0, 160, 80))
+local ClearButton = makeButton("🗑  Очистить все точки", 382, Color3.fromRGB(160, 40, 40))
+ClearButton.Size = UDim2.new(1, 0, 0, 28)
+
+-- Статус
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Text = "Статус: ожидание"
+StatusLabel.Size = UDim2.new(1, 0, 0, 16)
+StatusLabel.Position = UDim2.new(0, 0, 0, 416)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.TextColor3 = Color3.fromRGB(100, 200, 100)
+StatusLabel.TextSize = 11
+StatusLabel.Font = Enum.Font.Gotham
+StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+StatusLabel.Parent = Content
+
+-- ===== ЛОГИКА =====
+
+local function serializeWaypoints()
+    local parts = {}
+    for _, wp in ipairs(waypoints) do
+        table.insert(parts, string.format("%.2f,%.2f,%.2f,%.2f", wp.pos.X, wp.pos.Y, wp.pos.Z, wp.delay))
+    end
+    return table.concat(parts, ";")
+end
+
+local function deserializeWaypoints(str)
+    local result = {}
+    for entry in str:gmatch("[^;]+") do
+        local x, y, z, d = entry:match("(%-?[%d%.]+),(%-?[%d%.]+),(%-?[%d%.]+),(%-?[%d%.]+)")
+        if x and y and z and d then
+            table.insert(result, {
+                pos = Vector3.new(tonumber(x), tonumber(y), tonumber(z)),
+                delay = tonumber(d)
+            })
+        end
+    end
+    return result
+end
+
+local function updateList()
+    List:ClearAllChildren()
+    -- Переcоздаём layout
+    local ly = Instance.new("UIListLayout")
+    ly.SortOrder = Enum.SortOrder.LayoutOrder
+    ly.Padding = UDim.new(0, 4)
+    ly.Parent = List
+    local lp = Instance.new("UIPadding")
+    lp.PaddingLeft = UDim.new(0, 6)
+    lp.PaddingRight = UDim.new(0, 6)
+    lp.PaddingTop = UDim.new(0, 6)
+    lp.Parent = List
+
+    for i, wp in ipairs(waypoints) do
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, 0, 0, 34)
+        row.BackgroundColor3 = Color3.fromRGB(26, 26, 38)
+        row.BorderSizePixel = 0
+        row.LayoutOrder = i
+        row.Parent = List
+        local rc = Instance.new("UICorner")
+        rc.CornerRadius = UDim.new(0, 6)
+        rc.Parent = row
+
+        -- Номер
+        local num = Instance.new("TextLabel")
+        num.Text = tostring(i)
+        num.Size = UDim2.new(0, 20, 1, 0)
+        num.Position = UDim2.new(0, 6, 0, 0)
+        num.BackgroundTransparency = 1
+        num.TextColor3 = Color3.fromRGB(100, 140, 255)
+        num.TextSize = 12
+        num.Font = Enum.Font.GothamBold
+        num.Parent = row
+
+        -- Координаты
+        local coords = Instance.new("TextLabel")
+        coords.Text = string.format("X%d Y%d Z%d", math.floor(wp.pos.X), math.floor(wp.pos.Y), math.floor(wp.pos.Z))
+        coords.Size = UDim2.new(0, 118, 1, 0)
+        coords.Position = UDim2.new(0, 28, 0, 0)
+        coords.BackgroundTransparency = 1
+        coords.TextColor3 = Color3.fromRGB(200, 200, 220)
+        coords.TextSize = 11
+        coords.Font = Enum.Font.Gotham
+        coords.TextXAlignment = Enum.TextXAlignment.Left
+        coords.Parent = row
+
+        -- Задержка (редактируемая)
+        local delayBox = Instance.new("TextBox")
+        delayBox.Text = tostring(wp.delay)
+        delayBox.Size = UDim2.new(0, 44, 0, 22)
+        delayBox.Position = UDim2.new(0, 148, 0.5, -11)
+        delayBox.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
+        delayBox.TextColor3 = Color3.fromRGB(255, 220, 100)
+        delayBox.TextSize = 11
+        delayBox.Font = Enum.Font.GothamSemibold
+        delayBox.BorderSizePixel = 0
+        delayBox.Parent = row
+        local dc = Instance.new("UICorner")
+        dc.CornerRadius = UDim.new(0, 5)
+        dc.Parent = delayBox
+
+        local secLabel = Instance.new("TextLabel")
+        secLabel.Text = "с"
+        secLabel.Size = UDim2.new(0, 12, 1, 0)
+        secLabel.Position = UDim2.new(0, 194, 0, 0)
+        secLabel.BackgroundTransparency = 1
+        secLabel.TextColor3 = Color3.fromRGB(130, 130, 160)
+        secLabel.TextSize = 11
+        secLabel.Font = Enum.Font.Gotham
+        secLabel.Parent = row
+
+        local idx = i
+        delayBox.FocusLost:Connect(function()
+            local v = tonumber(delayBox.Text)
+            if v and v > 0 then
+                waypoints[idx].delay = v
+                delayBox.Text = tostring(v)
+            else
+                delayBox.Text = tostring(waypoints[idx].delay)
+            end
+        end)
+
+        -- Кнопка удалить
+        local delBtn = Instance.new("TextButton")
+        delBtn.Text = "✕"
+        delBtn.Size = UDim2.new(0, 24, 0, 24)
+        delBtn.Position = UDim2.new(1, -28, 0.5, -12)
+        delBtn.BackgroundColor3 = Color3.fromRGB(160, 40, 40)
+        delBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        delBtn.TextSize = 11
+        delBtn.Font = Enum.Font.GothamBold
+        delBtn.BorderSizePixel = 0
+        delBtn.Parent = row
+        local dbc = Instance.new("UICorner")
+        dbc.CornerRadius = UDim.new(0, 5)
+        dbc.Parent = delBtn
+
+        delBtn.MouseButton1Click:Connect(function()
+            table.remove(waypoints, idx)
+            updateList()
+        end)
+    end
+
+    -- Обновляем высоту скроллинга
+    local total = #waypoints * 38 + 10
+    List.CanvasSize = UDim2.new(0, 0, 0, total)
+end
+
+-- Сохранить точку
+SaveButton.MouseButton1Click:Connect(function()
+    local pos = root.Position
+    table.insert(waypoints, { pos = pos, delay = 1.0 })
+    updateList()
+    StatusLabel.Text = "Точка " .. #waypoints .. " сохранена"
+end)
+
+-- Экспорт
+ExportBtn.MouseButton1Click:Connect(function()
+    if #waypoints == 0 then
+        StatusLabel.Text = "Нет точек для копирования"
+        return
+    end
+    local data = serializeWaypoints()
+    ImportBox.Text = data
+    -- Попытка скопировать в буфер (работает в некоторых исполнителях)
+    if setclipboard then
+        setclipboard(data)
+        StatusLabel.Text = "Скопировано в буфер (" .. #waypoints .. " точек)"
+    else
+        StatusLabel.Text = "Скопируй текст из поля ввода вручную"
+    end
+    ClipLabel.Text = data
+end)
+
+-- Импорт
+local function doImport()
+    local text = ImportBox.Text
+    if text == "" then
+        StatusLabel.Text = "Поле пустое — вставь данные точек"
+        return
+    end
+    local loaded = deserializeWaypoints(text)
+    if #loaded > 0 then
+        waypoints = loaded
+        updateList()
+        StatusLabel.Text = "Загружено точек: " .. #loaded
+        ImportBox.Text = ""
+    else
+        StatusLabel.Text = "Ошибка: неверный формат данных"
+    end
+end
+
+ImportBtn.MouseButton1Click:Connect(doImport)
+ImportBox.FocusLost:Connect(function(enterPressed)
+    if enterPressed then doImport() end
+end)
+
+-- Старт / стоп
+StartButton.MouseButton1Click:Connect(function()
+    farming = not farming
+    if farming then
+        if #waypoints == 0 then
+            farming = false
+            StatusLabel.Text = "Нет точек для фарма"
+            return
+        end
+        StartButton.Text = "⏹  Остановить фарм"
+        StartButton.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+        StatusLabel.Text = "Фарм запущен..."
+
+        spawn(function()
+            while farming and #waypoints > 0 do
+                local wp = waypoints[currentIndex]
+                if wp then
+                    root.CFrame = CFrame.new(wp.pos + Vector3.new(0, 3, 0))
+                    StatusLabel.Text = string.format("Точка %d/%d | ожидание %.1fс", currentIndex, #waypoints, wp.delay)
+                    local t = 0
+                    local step = 0.1
+                    while farming and t < wp.delay do
+                        wait(step)
+                        t = t + step
+                    end
+                    if not farming then break end
+                    currentIndex = currentIndex + 1
+                    if currentIndex > #waypoints then
+                        currentIndex = 1
+                    end
+                else
+                    wait(0.5)
+                end
+            end
+            if not farming then
+                StatusLabel.Text = "Фарм остановлен"
+            end
+        end)
+    else
+        StartButton.Text = "▶  Запустить фарм"
+        StartButton.BackgroundColor3 = Color3.fromRGB(0, 160, 80)
+        StatusLabel.Text = "Фарм остановлен"
+    end
+end)
+
+-- Очистить
+ClearButton.MouseButton1Click:Connect(function()
+    farming = false
+    waypoints = {}
+    currentIndex = 1
+    updateList()
+    StartButton.Text = "▶  Запустить фарм"
+    StartButton.BackgroundColor3 = Color3.fromRGB(0, 160, 80)
+    StatusLabel.Text = "Все точки удалены"
+end)
+
+-- Закрыть GUI
+CloseBtn.MouseButton1Click:Connect(function()
+    farming = false
+    ScreenGui:Destroy()
+end)
+
+-- Свернуть / развернуть
+local minimized = false
+MinBtn.MouseButton1Click:Connect(function()
+    minimized = not minimized
+    Content.Visible = not minimized
+    if minimized then
+        Frame.Size = UDim2.new(0, 340, 0, 44)
+        MinBtn.Text = "+"
+    else
+        Frame.Size = UDim2.new(0, 340, 0, 480)
+        MinBtn.Text = "–"
+    end
+end)
+
+print("✅ Waypoint Farm загружен!")
