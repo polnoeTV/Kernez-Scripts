@@ -1,0 +1,223 @@
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Camera = workspace.CurrentCamera
+
+local SPEED_MULTIPLIER = 30
+local JUMP_POWER = 60
+local JUMP_GAP = 0.3
+
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local ball = character:WaitForChild("HumanoidRootPart")
+
+local isBallMode = false
+local connection = nil
+local forwardButtonDown = false
+local backwardButtonDown = false
+
+local params = RaycastParams.new()
+params.FilterType = Enum.RaycastFilterType.Blacklist
+params.FilterDescendantsInstances = {character}
+
+-- ==================== Главное меню ====================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = player:WaitForChild("PlayerGui")
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 200, 0, 140)
+MainFrame.Position = UDim2.new(0.05, 0, 0.3, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = ScreenGui
+
+local UICorner = Instance.new("UICorner", MainFrame)
+UICorner.CornerRadius = UDim.new(0, 10)
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 35)
+Title.BackgroundTransparency = 1
+Title.Text = "Ball Mode"
+Title.TextColor3 = Color3.new(1,1,1)
+Title.TextScaled = true
+Title.Font = Enum.Font.GothamBold
+Title.Parent = MainFrame
+
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Size = UDim2.new(0.9, 0, 0, 40)
+ToggleBtn.Position = UDim2.new(0.05, 0, 0.35, 0)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+ToggleBtn.Text = "Включить режим мяча"
+ToggleBtn.TextColor3 = Color3.new(1,1,1)
+ToggleBtn.TextScaled = true
+ToggleBtn.Font = Enum.Font.Gotham
+ToggleBtn.Parent = MainFrame
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 30, 0, 30)
+CloseBtn.Position = UDim2.new(1, -35, 0, 5)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
+CloseBtn.Text = "✕"
+CloseBtn.TextColor3 = Color3.new(1,1,1)
+CloseBtn.TextScaled = true
+CloseBtn.Parent = MainFrame
+
+Instance.new("UICorner", ToggleBtn)
+Instance.new("UICorner", CloseBtn)
+
+-- ==================== Контрольные кнопки (как в vfly) ====================
+local ControlFrame = Instance.new("Frame")
+ControlFrame.Name = "BallControls"
+ControlFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+ControlFrame.BorderSizePixel = 0
+ControlFrame.Position = UDim2.new(0.12, 0, 0.55, 0)
+ControlFrame.Size = UDim2.new(0.15, 0, 0.32, 0)
+ControlFrame.Visible = false
+ControlFrame.Active = true
+ControlFrame.Draggable = true
+ControlFrame.Parent = ScreenGui
+
+local ControlCorner = Instance.new("UICorner", ControlFrame)
+ControlCorner.CornerRadius = UDim.new(0, 8)
+
+-- Кнопка Вперёд
+local ForwardBtn = Instance.new("TextButton")
+ForwardBtn.Name = "Forward"
+ForwardBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 191)
+ForwardBtn.Size = UDim2.new(0.71, 0, 0.48, 0)
+ForwardBtn.Position = UDim2.new(0.145, 0, 0.02, 0)
+ForwardBtn.Text = "^"
+ForwardBtn.TextColor3 = Color3.new(1,1,1)
+ForwardBtn.TextScaled = true
+ForwardBtn.Font = Enum.Font.SourceSansBold
+ForwardBtn.Parent = ControlFrame
+
+-- Кнопка Назад
+local BackwardBtn = Instance.new("TextButton")
+BackwardBtn.Name = "Backward"
+BackwardBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 191)
+BackwardBtn.Size = UDim2.new(0.71, 0, 0.48, 0)
+BackwardBtn.Position = UDim2.new(0.145, 0, 0.5, 0)
+BackwardBtn.Rotation = 180
+BackwardBtn.Text = "^"
+BackwardBtn.TextColor3 = Color3.new(1,1,1)
+BackwardBtn.TextScaled = true
+BackwardBtn.Font = Enum.Font.SourceSansBold
+BackwardBtn.Parent = ControlFrame
+
+-- ==================== Логика ====================
+local function updateBall(delta)
+    ball.CanCollide = true
+    humanoid.PlatformStand = true
+
+    if UserInputService:GetFocusedTextBox() then return end
+
+    -- Старое управление WASD (ПК)
+    if UserInputService:IsKeyDown("W") or forwardButtonDown then
+        ball.RotVelocity -= Camera.CFrame.RightVector * delta * SPEED_MULTIPLIER
+    end
+    if UserInputService:IsKeyDown("A") then
+        ball.RotVelocity -= Camera.CFrame.LookVector * delta * SPEED_MULTIPLIER
+    end
+    if UserInputService:IsKeyDown("S") or backwardButtonDown then
+        ball.RotVelocity += Camera.CFrame.RightVector * delta * SPEED_MULTIPLIER
+    end
+    if UserInputService:IsKeyDown("D") then
+        ball.RotVelocity += Camera.CFrame.LookVector * delta * SPEED_MULTIPLIER
+    end
+end
+
+local function enableBallMode()
+    isBallMode = true
+    ToggleBtn.Text = "Выключить режим мяча"
+    ToggleBtn.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
+
+    for _, v in ipairs(character:GetDescendants()) do
+        if v:IsA("BasePart") then v.CanCollide = false end
+    end
+
+    ball.Shape = Enum.PartType.Ball
+    ball.Size = Vector3.new(5,5,5)
+
+    humanoid.PlatformStand = true
+    Camera.CameraSubject = ball
+
+    ControlFrame.Visible = true
+    connection = RunService.RenderStepped:Connect(updateBall)
+end
+
+local function disableBallMode()
+    isBallMode = false
+    ToggleBtn.Text = "Включить режим мяча"
+    ToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+    ControlFrame.Visible = false
+
+    if connection then
+        connection:Disconnect()
+        connection = nil
+    end
+
+    humanoid.PlatformStand = false
+    Camera.CameraSubject = humanoid
+end
+
+-- Кнопки главного меню
+ToggleBtn.MouseButton1Click:Connect(function()
+    if isBallMode then disableBallMode() else enableBallMode() end
+end)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    disableBallMode()
+    ScreenGui:Destroy()
+end)
+
+-- Обработка нажатий на контрольные кнопки
+local function handleInput(btn, isDown)
+    if btn.Name == "Forward" then
+        forwardButtonDown = isDown
+    elseif btn.Name == "Backward" then
+        backwardButtonDown = isDown
+    end
+end
+
+ForwardBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        handleInput(ForwardBtn, true)
+    end
+end)
+ForwardBtn.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        handleInput(ForwardBtn, false)
+    end
+end)
+
+BackwardBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        handleInput(BackwardBtn, true)
+    end
+end)
+BackwardBtn.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        handleInput(BackwardBtn, false)
+    end
+end)
+
+-- Прыжок
+UserInputService.JumpRequest:Connect(function()
+    if not isBallMode then return end
+    local result = workspace:Raycast(ball.Position, Vector3.new(0, -((ball.Size.Y/2)+JUMP_GAP), 0), params)
+    if result then
+        ball.Velocity = ball.Velocity + Vector3.new(0, JUMP_POWER, 0)
+    end
+end)
+
+player.CharacterAdded:Connect(function(newChar)
+    character = newChar
+    humanoid = newChar:WaitForChild("Humanoid")
+    ball = newChar:WaitForChild("HumanoidRootPart")
+end)
+
+humanoid.Died:Connect(disableBallMode)
